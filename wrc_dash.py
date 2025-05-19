@@ -16,7 +16,7 @@ VALID_USERNAME_PASSWORD_PAIRS = {
 def make_search_layout():
     return html.Div(
         [
-            html.H2("Search"),
+            html.H2("Search Runners"),
             dbc.Input(id="search-input", placeholder="Runner name", debounce=True),
             dbc.Button("Search", id="search-button", n_clicks=0, className="mt-2", color="primary"),
             html.Hr(),
