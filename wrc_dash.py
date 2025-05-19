@@ -5,7 +5,7 @@ import dash_auth
 import plotly.express as px
 import plotly.graph_objs as go
 #from calibration_pie_chart import generate_pie_chart
-from search_function import search_calibrations
+from wrc_app.search_function import search_calibrations
 # Server address is http://127.0.0.1:8050/
 # Authentication setup
 VALID_USERNAME_PASSWORD_PAIRS = {
