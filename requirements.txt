@@ -4,3 +4,4 @@ psycopg2
 gunicorn
 dash_bootstrap_components
 dash_auth
+pandas
