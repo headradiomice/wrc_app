@@ -1,7 +1,7 @@
 import dash
 from dash.dependencies import Input, Output, State
-from wrc_app.layouts import make_search_layout
-from wrc_app.search_function import search_calibrations
+from my_wrc_app.layouts import make_search_layout
+from my_wrc_app.search_function import search_calibrations
 from dash import html
 
 def register_callbacks(app):
