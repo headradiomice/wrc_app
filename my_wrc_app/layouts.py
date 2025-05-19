@@ -89,7 +89,7 @@ def base_layout():
 
 def make_time_entry_layout(races, runners):
     race_options = [{'label': r['race'], 'value': r['key']} for r in races]
-    runner_options = [{'label': r['name'], 'value': r['id']} for r in runners]
+    runner_options = [{'label': r['label'], 'value': r['value']} for r in runners]
 
     return dbc.Container([
         dbc.Row([

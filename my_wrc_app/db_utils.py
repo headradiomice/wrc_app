@@ -1,169 +1,194 @@
+import datetime as dt
+import re
+
 import psycopg2
 import psycopg2.extras
-import re
-import datetime as datetime
+from psycopg2 import sql
 
-dbname = "postgres"
-user = "postgres.sovxtczrsmqbuttnhdkj"
-password = "wrcadmin#1979"
-host = "aws-0-eu-west-2.pooler.supabase.com"
-port = "6543"
+# ------------------------------------------------------------------ #
+#  database connection parameters
+# ------------------------------------------------------------------ #
+DB_NAME = "postgres"
+DB_USER = "postgres.sovxtczrsmqbuttnhdkj"
+DB_PASSWORD = "wrcadmin#1979"
+DB_HOST = "aws-0-eu-west-2.pooler.supabase.com"
+DB_PORT = 6543
 
+
+# ------------------------------------------------------------------ #
+#  helpers
+# ------------------------------------------------------------------ #
 def get_connection():
-    try:
-        conn = psycopg2.connect(
-            dbname=dbname,
-            user=user,
-            password=password,
-            host=host,
-            port=port
-        )
-        return conn
-    except Exception as e:
-        print(f"Error connecting to DB: {e}")
-        return None
-
-
-def get_races():
-    sql = """
-        SELECT "key", "race"
-        FROM races
-        ORDER BY "race" ASC;
     """
-    conn = get_connection()
-    if not conn:
-        return []
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql)
-            return cur.fetchall()
-    except Exception as e:
-        print(f"Error fetching races: {e}")
-        return []
-    finally:
-        conn.close()
+    Open a new connection.  Caller may use it as context manager:
+
+        with get_connection() as conn:
+            ...
+
+    The conn is automatically committed / rolled back by psycopg2.
+    """
+    return psycopg2.connect(
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
+    )
+
+
+# ------------------------------------------------------------------ #
+#  catalogue data
+# ------------------------------------------------------------------ #
+def get_races():
+    """
+    Returns a list of dicts:  {'key': '5k_1', 'race': 'Parkrun 21-Jan-24'}
+    """
+    sql_txt = """
+        SELECT key, race
+        FROM races
+        ORDER BY race;
+    """
+    with get_connection() as conn, conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    ) as cur:
+        cur.execute(sql_txt)
+        return cur.fetchall()
 
 
 def get_runners():
-    sql = """
+    """
+    Returns dropdown options like
+        [{'label': 'Jane Doe', 'value': 'Jane Doe'}, …]
+    """
+    sql_txt = """
         SELECT name
         FROM runner_info
-        ORDER BY name ASC;
+        ORDER BY name;
     """
-    conn = get_connection()
-    if not conn:
-        return []
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql)
-            results = cur.fetchall()
-            # both label and value are 'name'
-            return [{'id': r['name'], 'name': r['name']} for r in results]
-    except Exception as e:
-        print(f"Error fetching runners: {e}")
-        return []
-    finally:
-        conn.close()
+    with get_connection() as conn, conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    ) as cur:
+        cur.execute(sql_txt)
+        rows = cur.fetchall()
+        return [{"label": r["name"], "value": r["name"]} for r in rows]
 
 
-def update_runner_time(runner_identifier, race_key, time_str):
-    race_key = race_key.strip()  # Remove trailing/leading spaces
+# ------------------------------------------------------------------ #
+#  generic column updater  (raw times, points, whatever)
+# ------------------------------------------------------------------ #
+def update_runner_value(runner_name: str, column: str, value):
+    column = column.strip()                       # trims '\n'
+    if not re.fullmatch(r"[A-Za-z0-9_]+", column):
+        raise ValueError(f"Bad column name: {column!r}")
 
-    import re
-    if not re.match(r'^[a-zA-Z0-9_]+$', race_key):
-        raise ValueError("Invalid race key")
-
-    if not re.match(r'^\d{1,2}:\d{2}:\d{2}$', time_str):
-        raise ValueError("Invalid time format")
-
-    sql = f"""
+    query = sql.SQL(
+        """
         UPDATE runner_info
-        SET "{race_key}" = %s
-        WHERE "name" = %s;
+        SET {col} = %s
+        WHERE name = %s;
+        """
+    ).format(col=sql.Identifier(column))
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(query, (value, runner_name))
+
+
+# ------------------------------------------------------------------ #
+#  runner / race meta
+# ------------------------------------------------------------------ #
+def get_runner_info(runner_name):
     """
-    conn = get_connection()
-    if not conn:
-        raise ConnectionError("DB connection failed")
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (time_str, runner_identifier))
-            conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-
-def get_runner_info(runner_id):
-    """Returns dict with dob (date) and sex ('M' or 'F') for a runner."""
-    sql = """
+    Returns {'dob': date, 'sex': 'M'}  (or None) for the given runner name.
+    """
+    sql_txt = """
         SELECT dob, sex
         FROM runner_info
-        WHERE name = %s;  -- Or change to ID column if you have one
+        WHERE name = %s;
     """
-    conn = get_connection()
-    if not conn:
-        return None
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (runner_id,))
-            return cur.fetchone()
-    finally:
-        conn.close()
+    with get_connection() as conn, conn.cursor(
+        cursor_factory=psycopg2.extras.RealDictCursor
+    ) as cur:
+        cur.execute(sql_txt, (runner_name,))
+        return cur.fetchone()
+
 
 def get_race_date(race_key):
-    """Returns date of race for given key"""
-    sql = """
-        SELECT race_date  -- Adjust column name accordingly
+    sql_txt = """
+        SELECT race_date
         FROM races
         WHERE key = %s;
     """
-    conn = get_connection()
-    if not conn:
-        return None
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (race_key,))
-            res = cur.fetchone()
-            return res[0] if res else None
-    finally:
-        conn.close()
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql_txt, (race_key,))
+        row = cur.fetchone()
+        return row[0] if row else None
 
-def get_world_record(sex, age, distance='5k'):
+
+# ------------------------------------------------------------------ #
+#  world record
+# ------------------------------------------------------------------ #
+def get_world_record(sex: str, age: int, distance: str = "5k"):
     """
-    Returns the world record time in seconds for the given sex, age, and distance.
-    sex: 'M' or 'F'
-    age: integer years
+    Return WR time (seconds) for given sex, age, and distance.
+    The table layout must have a numeric 'age' column and one column per
+    distance containing an HH:MM:SS (or MM:SS) string.
     """
-    table = 'male_table' if sex == 'M' else 'female_table'
-    sql = f"""
-        SELECT "{distance}"
-        FROM {table}
-        WHERE age = %s
-        LIMIT 1;
-    """
-    conn = get_connection()
-    if not conn:
-        return None
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (age,))
-            res = cur.fetchone()
-            if res and res[0]:
-                # Assuming world record stored as HH:MM:SS string, convert to seconds
-                h, m, s = map(int, res[0].split(':'))
-                return h*3600 + m*60 + s
+    table = "male_table" if sex.upper() == "M" else "female_table"
+
+    query = sql.SQL("SELECT {dist} FROM {tbl} WHERE age = %s LIMIT 1").format(
+        dist=sql.Identifier(distance), tbl=sql.Identifier(table)
+    )
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(query, (age,))
+        row = cur.fetchone()
+        if not row or row[0] is None:
             return None
-    finally:
-        conn.close()
 
-    print(f"Querying table={table} column={distance} for age={age}")
+        parts = list(map(int, row[0].split(":")))
+        if len(parts) == 2:  # MM:SS
+            m, s = parts
+            h = 0
+        else:  # HH:MM:SS
+            h, m, s = parts
+        return h * 3600 + m * 60 + s
 
-def time_str_to_seconds(time_str):
-    h, m, s = map(int, time_str.split(':'))
+
+# ------------------------------------------------------------------ #
+#  misc utils
+# ------------------------------------------------------------------ #
+def time_str_to_seconds(time_str: str) -> int:
+    parts = list(map(int, time_str.split(":")))
+    if len(parts) == 2:
+        m, s = parts
+        h = 0
+    else:
+        h, m, s = parts
     return h * 3600 + m * 60 + s
 
+
 def calculate_age(born, on_date):
-    """Calculate full years age as of on_date."""
-    return on_date.year - born.year - ((on_date.month, on_date.day) < (born.month, born.day))
+    born = as_date(born)
+    on_date = as_date(on_date)
+    if not born or not on_date:
+        return None          # caller decides how to handle missing data
+    return on_date.year - born.year - (
+        (on_date.month, on_date.day) < (born.month, born.day)
+    )
+
+def as_date(value):
+    """
+    Accepts date, datetime, or ISO-string and returns a datetime.date.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
+        return value
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return dt.datetime.fromisoformat(value).date()
+        except ValueError:
+            return None      # unparsable string
+    return None
