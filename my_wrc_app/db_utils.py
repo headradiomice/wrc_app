@@ -1,6 +1,7 @@
 import psycopg2
 import psycopg2.extras
 import re
+import datetime as datetime
 
 dbname = "postgres"
 user = "postgres.sovxtczrsmqbuttnhdkj"
@@ -93,3 +94,76 @@ def update_runner_time(runner_identifier, race_key, time_str):
         raise e
     finally:
         conn.close()
+
+def get_runner_info(runner_id):
+    """Returns dict with dob (date) and sex ('M' or 'F') for a runner."""
+    sql = """
+        SELECT dob, sex
+        FROM runner_info
+        WHERE name = %s;  -- Or change to ID column if you have one
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (runner_id,))
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+def get_race_date(race_key):
+    """Returns date of race for given key"""
+    sql = """
+        SELECT race_date  -- Adjust column name accordingly
+        FROM races
+        WHERE key = %s;
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (race_key,))
+            res = cur.fetchone()
+            return res[0] if res else None
+    finally:
+        conn.close()
+
+def get_world_record(sex, age, distance='5k'):
+    """
+    Returns the world record time in seconds for the given sex, age, and distance.
+    sex: 'M' or 'F'
+    age: integer years
+    """
+    table = 'male_table' if sex == 'M' else 'female_table'
+    sql = f"""
+        SELECT "{distance}"
+        FROM {table}
+        WHERE age = %s
+        LIMIT 1;
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (age,))
+            res = cur.fetchone()
+            if res and res[0]:
+                # Assuming world record stored as HH:MM:SS string, convert to seconds
+                h, m, s = map(int, res[0].split(':'))
+                return h*3600 + m*60 + s
+            return None
+    finally:
+        conn.close()
+
+    print(f"Querying table={table} column={distance} for age={age}")
+
+def time_str_to_seconds(time_str):
+    h, m, s = map(int, time_str.split(':'))
+    return h * 3600 + m * 60 + s
+
+def calculate_age(born, on_date):
+    """Calculate full years age as of on_date."""
+    return on_date.year - born.year - ((on_date.month, on_date.day) < (born.month, born.day))
