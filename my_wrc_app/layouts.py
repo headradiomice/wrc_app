@@ -1,4 +1,4 @@
-from dash import html, dash_table
+from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
 
 def make_search_layout():
@@ -67,6 +67,7 @@ def base_layout():
                                 dbc.Button("Add Data", id="add-data-link", n_clicks=0, className="btn-custom"),
                                 dbc.Button("Upcoming Tasks", id="upcoming-tasks-link", n_clicks=0, className="btn-custom"),
                                 dbc.Button("Visualisations", id="visualisations-link", n_clicks=0, className="btn-custom"),
+                                dbc.Button("Add Time", id="add-time-link", n_clicks=0, className="btn-custom"),
                             ],
                             vertical=True,
                             pills=True,
@@ -85,3 +86,24 @@ def base_layout():
         ],
         style={"backgroundColor": "black", "color": "yellow", "height": "100vh"}
     )
+
+def make_time_entry_layout(races, runners):
+    race_options = [{'label': r['race'], 'value': r['key']} for r in races]
+    runner_options = [{'label': r['name'], 'value': r['id']} for r in runners]
+
+    return dbc.Container([
+        dbc.Row([
+            dbc.Label("Select Race"),
+            dcc.Dropdown(id="race-dropdown", options=race_options, placeholder="Select a race")
+        ], className="mb-3"),
+        dbc.Row([
+            dbc.Label("Select Runner"),
+            dcc.Dropdown(id="runner-dropdown", options=runner_options, placeholder="Select a runner")
+        ], className="mb-3"),
+        dbc.Row([
+            dbc.Label("Enter Time (e.g., 00:25:30)"),
+            dbc.Input(id="time-input", type="text", placeholder="HH:MM:SS"),
+        ], className="mb-3"),
+        dbc.Button("Submit Time", id="submit-time-button", color="primary"),
+        html.Div(id="submit-feedback", className="mt-3")
+    ])
